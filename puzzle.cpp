@@ -7,16 +7,29 @@ Puzzle init_Puzzle()
 {
 	Puzzle puzzle{};
 	for (size_t i = 0; i < static_cast<unsigned long long>(BOARD_SIZE) - 1; i++)
-		{
-			puzzle.permutation[i] = i + 1;
-		}
+	{
+		puzzle.permutation[i] = i + 1;
+	}
 
-	/*std::random_device rd;
-	std::mt19937 g(rd());*/
-	unsigned int seed = 1234;
-	std::mt19937 g(seed);
+	std::random_device rd;
+	std::mt19937 g(rd());
+	/*unsigned int seed = 1234;
+	std::mt19937 g(seed);*/
 	std::shuffle(puzzle.permutation, puzzle.permutation + BOARD_SIZE - 1, g);
 
+	puzzle.zero_index = BOARD_SIZE - 1;
+	puzzle.permutation[BOARD_SIZE - 1] = 0;
+
+	return puzzle;
+}
+
+Puzzle init_Goal()
+{
+	Puzzle puzzle{};
+	for (size_t i = 0; i < static_cast<unsigned long long>(BOARD_SIZE) - 1; i++)
+	{
+		puzzle.permutation[i] = i + 1;
+	}
 	puzzle.zero_index = BOARD_SIZE - 1;
 	puzzle.permutation[BOARD_SIZE - 1] = 0;
 
@@ -110,25 +123,4 @@ void print_Puzzle(Puzzle puzzle)
 		}
 		std::cout << "|" << std::endl;
 	}
-}
-
-
-
-
-#include <iterator> // Include this header for std::begin and std::end
-
-int main() {
-   Puzzle puzzle = init_Puzzle();
-   print_Puzzle(puzzle);
-   auto ans = is_Solvable(puzzle) ? "is solvable" : "is NOT solvable";
-   std::cout << "This puzzle " << ans << std::endl;
-
-   Puzzle* neighbours = find_Neighbours(puzzle);
-
-   for (int i = 0; i < 4; i++) {
-       print_Puzzle(neighbours[i]);
-	   std::cout << std::endl;
-   }
-
-   return 0;
 }

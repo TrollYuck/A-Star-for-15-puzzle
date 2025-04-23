@@ -19,9 +19,11 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="a_star.cpp" />
     <ClCompile Include="puzzle.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="a_star.hpp" />
     <ClInclude Include="puzzle.hpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
