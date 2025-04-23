@@ -18,6 +18,12 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="puzzle.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="puzzle.hpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -126,15 +132,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="a_star.hpp" />
-    <ClInclude Include="puzzle.hpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="a_star.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="puzzle.cpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

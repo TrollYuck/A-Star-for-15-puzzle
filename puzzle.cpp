@@ -1,132 +1,134 @@
-#include "puzzle.hpp"  
-#include <iostream>  
-#include <algorithm> 
-#include <vector>
-#include <random> 
-#include <stdexcept>
-#include <sstream>
+#include <iostream>
+#include <algorithm>
+#include <random>
+#include "puzzle.hpp"
 
-puzzle::puzzle() : size(0), zero_position{ 0, 0 } {}
- 
-puzzle::puzzle(int size, bool is_goal) : size(size), zero_position{ 0, 0 } {
-    // Allocate memory for the board
-    int totalValues = size * size;
-    perm_curr.resize(totalValues);
-    perm_prev.resize(totalValues);
+Puzzle init_Puzzle() 
+{
+	Puzzle puzzle{};
+	for (size_t i = 0; i < static_cast<unsigned long long>(BOARD_SIZE) - 1; i++)
+		{
+			puzzle.permutation[i] = i + 1;
+		}
 
-    // Create an array to hold values from 1 to size * size - 1
-    std::vector<int> values(totalValues - 1);
-    for (int i = 0; i < totalValues - 1; ++i) {
-        values[i] = i + 1;
-    }
+	/*std::random_device rd;
+	std::mt19937 g(rd());*/
+	unsigned int seed = 1234;
+	std::mt19937 g(seed);
+	std::shuffle(puzzle.permutation, puzzle.permutation + BOARD_SIZE - 1, g);
 
-    if (!is_goal) {
-        // Shuffle the array
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(values.begin(), values.end(), g);
-    }
+	puzzle.zero_index = BOARD_SIZE - 1;
+	puzzle.permutation[BOARD_SIZE - 1] = 0;
 
-    // Fill the board with values
-    for (int i = 0; i < totalValues - 1; ++i) {
-        perm_curr[i] = values[i];
-    }
-    perm_curr[totalValues - 1] = 0;
-
-
-    zero_position[0] = (totalValues - 1) / size;
-    zero_position[1] = (totalValues - 1) % size;
-
-    perm_prev = perm_curr;
+	return puzzle;
 }
 
-std::vector<int> puzzle::permute(int x, int y) {
-    if (x >= size || y >= size) {
-        throw std::out_of_range("Index out of bounds in permute function");
-    }
+Puzzle* find_Neighbours(Puzzle puzzle)
+{
+	static Puzzle neighbours[4]; 
+	int zero_idx = puzzle.zero_index;
+	int side_size = SIDE_SIZE;
+	int neighbor_count = 0;
 
-    int zero_x = zero_position[0];
-    int zero_y = zero_position[1];
-    int manhattan_distance = abs(zero_x - x) + abs(zero_y - y);
+	// Define possible moves: {row_offset, col_offset}
+	int moves[4][2] = {
+		{-1, 0}, // Up
+		{1, 0},  // Down
+		{0, -1}, // Left
+		{0, 1}   // Right
+	};
 
-    if (manhattan_distance != 1) {
-        throw std::invalid_argument("The position is not a neighbor of the zero position");
-    }
+	for (int i = 0; i < 4; i++) {
+		int new_row = zero_idx / side_size + moves[i][0];
+		int new_col = zero_idx % side_size + moves[i][1];
 
-    for (int i = 0; i < size * size; ++i) {
-        perm_prev[i] = perm_curr[i];
-    }
+		if (new_row >= 0 && new_row < side_size && new_col >= 0 && new_col < side_size) {
+			int new_idx = new_row * side_size + new_col;
+			Puzzle neighbor = puzzle;
+			std::swap(neighbor.permutation[zero_idx], neighbor.permutation[new_idx]);
+			neighbor.zero_index = new_idx;
+			neighbours[neighbor_count++] = neighbor;
+		}
+	}
 
-    std::swap(perm_curr[static_cast<std::vector<int, std::allocator<int>>::size_type>(zero_x) * size + zero_y], 
-        perm_curr[static_cast<std::vector<int, std::allocator<int>>::size_type>(x) * size + y]);
-
-    return perm_curr;
+	return neighbours;
 }
 
-std::vector<puzzle> puzzle::get_neighbors() const {
-    std::vector<puzzle> neighbors;
-    int zero_x = zero_position[0];
-    int zero_y = zero_position[1];
 
-    // Possible moves: Up, Down, Left, Right
-    std::vector<std::pair<int, int>> moves = {
-        {zero_x - 1, zero_y}, // Up
-        {zero_x + 1, zero_y}, // Down
-        {zero_x, zero_y - 1}, // Left
-        {zero_x, zero_y + 1}  // Right
-    };
-
-    for (const auto& move : moves) {
-        if (move.first >= 0 && move.first < size && move.second >= 0 && move.second < size) {
-            puzzle new_puzzle = *this; // Copy current state
-            new_puzzle.permute(move.first, move.second);
-            new_puzzle.zero_position[0] = move.first;
-            new_puzzle.zero_position[1] = move.second;
-            neighbors.push_back(new_puzzle);
-        }
-    }
-
-    return neighbors;
+int num_of_Inversions(Puzzle puzzle)
+{
+	int inversions = 0;
+	for (size_t i = 0; i < static_cast<unsigned long long>(BOARD_SIZE) - 1; i++)
+	{
+		if (puzzle.permutation[i] != i + 1)
+			inversions++;
+	}
+	return inversions;
 }
 
-void puzzle::restore_previous_permutation() {
-    perm_curr = perm_prev;
+bool is_Solvable(Puzzle puzzle)
+{
+	return (num_of_Inversions(puzzle) % 2) == 0;
 }
 
-void puzzle::print_current_permutation() {
-    std::cout << "|";
-    for (int i = 0; i < size * size; i++) {
-        if (i % size == 0 && i != 0)
-            std::cout << "|" << std::endl << "|";
-        if (perm_curr[i] / 10 != 0 && perm_curr[i] != 0 || perm_curr[i] == 10) {
-            std::cout << " " << perm_curr[i] << " ";
-        }
-        else {
-            std::cout << " 0" << perm_curr[i] << " ";
-        }
-        
-    }
-    std::cout << "|" << std::endl;
+bool permutate(Puzzle* puzzle, int mv_idx)
+{
+	if (mv_idx < 0 || mv_idx >= BOARD_SIZE)
+		return false;
+
+	int zero_idx = puzzle->zero_index;
+
+	bool is_adjacent = 
+        (mv_idx == zero_idx - 1 && zero_idx % SIDE_SIZE != 0) || // Left
+        (mv_idx == zero_idx + 1 && (zero_idx + 1) % SIDE_SIZE != 0) || // Right
+        (mv_idx == zero_idx - SIDE_SIZE) || // Up
+        (mv_idx == zero_idx + SIDE_SIZE);   // Down
+
+    if (!is_adjacent)
+        return false;
+
+    std::swap(puzzle->permutation[zero_idx], puzzle->permutation[mv_idx]);
+
+    puzzle->zero_index = mv_idx;
+
+    return true;
 }
 
-bool puzzle::is_solvable() const {
-    return (number_of_inversions(*this) % 2 == 0);
+void print_Puzzle(Puzzle puzzle)
+{
+	int idx = 0;
+
+	for (size_t i = 0; i < SIDE_SIZE; i++)
+	{
+		std::cout << "| ";
+		for (size_t j = 0; j < SIDE_SIZE; j++) 
+		{
+			if (puzzle.permutation[idx] < 10)
+				std::cout << 0;
+			std::cout << puzzle.permutation[idx] << " ";
+			idx++;
+		}
+		std::cout << "|" << std::endl;
+	}
 }
 
-bool puzzle::operator==(const puzzle& other) const {
-    return perm_curr == other.perm_curr;
-}
 
-bool puzzle::operator<(const puzzle& other) const {
-    return number_of_inversions(*this) < number_of_inversions(other); // For priority queue sorting
-}
 
-int number_of_inversions(const puzzle& puzzle) {
-    int inversions = 0;
-    for (int i = 0; i < puzzle.size * puzzle.size; i++) {
-        if (puzzle.perm_curr[i] != 0 && puzzle.perm_curr[i] != i + 1) {
-            inversions++;
-        }
-    }
-    return inversions;
+
+#include <iterator> // Include this header for std::begin and std::end
+
+int main() {
+   Puzzle puzzle = init_Puzzle();
+   print_Puzzle(puzzle);
+   auto ans = is_Solvable(puzzle) ? "is solvable" : "is NOT solvable";
+   std::cout << "This puzzle " << ans << std::endl;
+
+   Puzzle* neighbours = find_Neighbours(puzzle);
+
+   for (int i = 0; i < 4; i++) {
+       print_Puzzle(neighbours[i]);
+	   std::cout << std::endl;
+   }
+
+   return 0;
 }
