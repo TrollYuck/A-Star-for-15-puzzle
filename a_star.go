@@ -28,11 +28,11 @@ type State struct {
 // Priority queue for A*
 type PriorityQueue []*State
 
-func (pq PriorityQueue) Len() int            { return len(pq) }
-func (pq PriorityQueue) Less(i, j int) bool  { return pq[i].fn < pq[j].fn }
-func (pq PriorityQueue) Swap(i, j int)       { pq[i], pq[j] = pq[j], pq[i] }
-func (pq *PriorityQueue) Push(x interface{}) { *pq = append(*pq, x.(*State)) }
-func (pq *PriorityQueue) Pop() interface{} {
+func (pq PriorityQueue) Len() int           { return len(pq) }
+func (pq PriorityQueue) Less(i, j int) bool { return pq[i].fn < pq[j].fn }
+func (pq PriorityQueue) Swap(i, j int)      { pq[i], pq[j] = pq[j], pq[i] }
+func (pq *PriorityQueue) Push(x any)        { *pq = append(*pq, x.(*State)) }
+func (pq *PriorityQueue) Pop() any {
 	n := len(*pq)
 	item := (*pq)[n-1]
 	*pq = (*pq)[:n-1]
@@ -165,6 +165,60 @@ func astar(start []int, heuristic int, n int) (goal *State, visited int) {
 	return nil, visited
 }
 
+func idaStar(start []int, heuristic int, n int) (goal *State, visited int) {
+	h0 := 0
+	if heuristic == 1 {
+		h0 = misplaced(start)
+	} else {
+		h0 = manhattan(start, n)
+	}
+	root := &State{board: start, heuristic: heuristic, gn: 0, hn: h0, fn: h0, prev: nil, move: -1, blank: findBlank(start)}
+
+	threshold := root.fn
+	for {
+		visited = 0
+		var found *State
+		var nextThreshold = -1
+
+		var dfs func(s *State, g, threshold int, visitedMap map[string]int) int
+		dfs = func(s *State, g, threshold int, visitedMap map[string]int) int {
+			visited++
+			f := g + s.hn
+			if f > threshold {
+				if nextThreshold == -1 || f < nextThreshold {
+					nextThreshold = f
+				}
+				return 0
+			}
+			if isGoal(s.board) {
+				found = s
+				return 1
+			}
+			visitedMap[key(s.board)] = g
+			for _, nb := range neighbors(s, n) {
+				k := key(nb.board)
+				if vg, ok := visitedMap[k]; ok && nb.gn >= vg {
+					continue
+				}
+				if dfs(nb, g+1, threshold, visitedMap) == 1 {
+					return 1
+				}
+			}
+			return 0
+		}
+
+		visitedMap := make(map[string]int)
+		if dfs(root, 0, threshold, visitedMap) == 1 {
+			return found, visited
+		}
+		if nextThreshold == -1 {
+			break
+		}
+		threshold = nextThreshold
+	}
+	return nil, visited
+}
+
 func findBlank(board []int) int {
 	for i, v := range board {
 		if v == 0 {
@@ -275,7 +329,7 @@ func main() {
 	// flags
 	dim := flag.Int("dim", 4, "Dimension of puzzle (3 or 4)")
 	heur := flag.Int("h", 2, "Heuristic: 1=misplaced, 2=Manhattan")
-	rmoves := flag.Int("rand", 30, "Number of random moves to generate puzzle")
+	rmoves := flag.Int("rand", 30, "Number of random moves to generate puzzle, -1 for full random puzzle")
 	nTests := flag.Int("n", 1, "Number of puzzles to solve for stats")
 	flag.Parse()
 
@@ -294,7 +348,7 @@ func main() {
 		printBoard(start, *dim)
 
 		startTime := time.Now()
-		goal, visited := astar(start, *heur, *dim)
+		goal, visited := idaStar(start, *heur, *dim)
 		elapsed := time.Since(startTime)
 		totalDuration += elapsed
 
