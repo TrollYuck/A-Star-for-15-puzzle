@@ -4,14 +4,11 @@ import (
 	"container/heap"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
+	"strconv"
+	"strings"
 	"time"
-)
-
-// Puzzle dimensions
-const (
-	N3 = 3
-	N4 = 4
 )
 
 type State struct {
@@ -56,13 +53,19 @@ func isSolvable(board []int, n int) bool {
 			}
 		}
 	}
+
 	if n%2 == 1 {
 		// odd dimension: even inversions → solvable
 		return inv%2 == 0
+	} else {
+		// even dimension: solvability depends on the row of the blank tile
+		// (counted from the bottom) and the parity of inversions.
+		blankIdx := findBlank(board)
+
+		blankRowFromBottom := n - (blankIdx / n)
+
+		return inv%2 != blankRowFromBottom%2
 	}
-	// even dimension, blank in the last position (last row):
-	// row from the bottom = 1, so we must have even inversions
-	return inv%2 == 0
 }
 
 // Heuristic: count of misplaced tiles
@@ -325,36 +328,132 @@ func reconstruct(goal *State) []int {
 	return path
 }
 
+func parseBoardString(boardStr string) ([]int, error) {
+	parts := strings.Split(boardStr, ",")
+	if len(parts) == 0 || (len(parts) == 1 && strings.TrimSpace(parts[0]) == "") {
+		return nil, fmt.Errorf("board string is empty or contains only whitespace")
+	}
+	board := make([]int, len(parts))
+	for i, s := range parts {
+		val, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil {
+			return nil, fmt.Errorf("invalid number '%s' in board string: %w", s, err)
+		}
+		board[i] = val
+	}
+	return board, nil
+}
+
+func isValidBoardContent(board []int, n int) bool {
+	expectedSize := n * n
+	if len(board) != expectedSize {
+		// This case should ideally be caught before calling this function
+		// by checking if len(board) is a perfect square.
+		return false
+	}
+
+	seen := make(map[int]bool)
+	for _, val := range board {
+		if val < 0 || val >= expectedSize { // Numbers must be 0 to n*n-1
+			return false
+		}
+		if seen[val] { // Check for duplicates
+			return false
+		}
+		seen[val] = true
+	}
+	// Check if all numbers from 0 to n*n-1 are present
+	return len(seen) == expectedSize
+}
+
 func main() {
 	// flags
-	dim := flag.Int("dim", 4, "Dimension of puzzle (3 or 4)")
-	heur := flag.Int("h", 2, "Heuristic: 1=misplaced, 2=Manhattan")
-	rmoves := flag.Int("rand", 30, "Number of random moves to generate puzzle, -1 for full random puzzle")
-	nTests := flag.Int("n", 1, "Number of puzzles to solve for stats")
+	dimFlag := flag.Int("dim", 4, "Dimension of puzzle (e.g., 3 for 3x3, 4 for 4x4). Used if -b is not provided.")
+	heurFlag := flag.Int("h", 2, "Heuristic: 1=misplaced, 2=Manhattan")
+	rmovesFlag := flag.Int("rand", 30, "Number of random moves to generate puzzle (if -b not used), -1 for full random puzzle")
+	nTestsFlag := flag.Int("n", 1, "Number of puzzles to solve for stats")
+	boardStrFlag := flag.String("b", "", "Board configuration as comma-separated numbers (e.g., \"1,2,3,4,5,6,7,8,0\"). Overrides -dim and -rand.")
 	flag.Parse()
 
-	if *dim != 3 && *dim != 4 {
-		fmt.Println("Dimension must be 3 or 4")
-		return
+	var boardToSolve []int
+	var n int // Actual dimension of the puzzle
+	boardProvidedByFlag := false
+
+	if *boardStrFlag != "" {
+		boardProvidedByFlag = true
+		parsedBoard, err := parseBoardString(*boardStrFlag)
+		if err != nil {
+			fmt.Printf("Error parsing board from -b flag: %v\n", err)
+			return
+		}
+
+		sqrtLen := math.Sqrt(float64(len(parsedBoard)))
+		if sqrtLen != math.Floor(sqrtLen) || len(parsedBoard) == 0 {
+			fmt.Println("Error: Board from -b flag must have a length that is a perfect square and non-zero (e.g., 9 for 3x3, 16 for 4x4).")
+			return
+		}
+		n = int(sqrtLen)
+
+		if *dimFlag != n && *dimFlag != 0 { // Check if -dim was set and differs
+			fmt.Printf("Warning: Dimension derived from -b flag (%d) is used, overriding -dim value (%d).\n", n, *dimFlag)
+		}
+		// Update dimFlag to reflect the actual dimension being used, though 'n' is the primary variable now.
+		*dimFlag = n
+
+		if !isValidBoardContent(parsedBoard, n) {
+			fmt.Printf("Error: Board content from -b flag is invalid for an %dx%d puzzle. It must contain all numbers from 0 to %d exactly once.\n", n, n, n*n-1)
+			return
+		}
+
+		boardToSolve = parsedBoard
+		if !isSolvable(boardToSolve, n) {
+			fmt.Println("The board configuration provided via -b is not solvable:")
+			printBoard(boardToSolve, n)
+			return
+		}
+		if *nTestsFlag > 1 {
+			fmt.Printf("Warning: Solving the same board provided by -b flag %d times.\n", *nTestsFlag)
+		}
+	} else {
+		// No -b flag, use -dim and -rand to generate puzzle(s)
+		if *dimFlag != 3 && *dimFlag != 4 {
+			fmt.Println("Dimension (-dim) must be 3 or 4 when -b is not used.")
+			return
+		}
+		n = *dimFlag
+		// Puzzle will be generated inside the loop if nTests > 1
 	}
 
 	totalVisited := 0
 	totalSteps := 0
 	var totalDuration time.Duration
 
-	for i := 0; i < *nTests; i++ {
-		start := newPuzzle(*dim, *rmoves)
+	for i := 0; i < *nTestsFlag; i++ {
+		var currentPuzzle []int
+		if boardProvidedByFlag {
+			currentPuzzle = boardToSolve // Use the same board from -b for all tests
+		} else {
+			currentPuzzle = newPuzzle(n, *rmovesFlag) // Generate a new puzzle for each test
+		}
+
 		fmt.Println("Puzzle #", i+1)
-		printBoard(start, *dim)
+		printBoard(currentPuzzle, n)
 
 		startTime := time.Now()
-		goal, visited := idaStar(start, *heur, *dim)
+		goal, visited := idaStar(currentPuzzle, *heurFlag, n)
 		elapsed := time.Since(startTime)
 		totalDuration += elapsed
 
+		if goal == nil {
+			fmt.Println("No solution found for puzzle #", i+1)
+			// Decide if you want to continue or stop if a puzzle is unsolvable
+			// (though isSolvable should prevent this for generated/valid input)
+			continue
+		}
+
 		path := reconstruct(goal)
 		fmt.Printf("Visited: %d, Steps: %d\n", visited, len(path))
-		if *nTests == 1 {
+		if *nTestsFlag == 1 { // Show moves only for a single test run
 			fmt.Println("Moves:", path)
 		}
 		fmt.Printf("Time: %s\n\n", elapsed)
@@ -363,12 +462,12 @@ func main() {
 		totalSteps += len(path)
 	}
 
-	if *nTests > 1 {
-		avgVisited := float64(totalVisited) / float64(*nTests)
-		avgSteps := float64(totalSteps) / float64(*nTests)
-		avgTime := totalDuration / time.Duration(*nTests)
+	if *nTestsFlag > 1 {
+		avgVisited := float64(totalVisited) / float64(*nTestsFlag)
+		avgSteps := float64(totalSteps) / float64(*nTestsFlag)
+		avgTime := totalDuration / time.Duration(*nTestsFlag)
 
-		fmt.Printf("Average over %d puzzles:\n", *nTests)
+		fmt.Printf("Average over %d puzzles:\n", *nTestsFlag)
 		fmt.Printf("  Visited states: %.2f\n", avgVisited)
 		fmt.Printf("  Solution length: %.2f moves\n", avgSteps)
 		fmt.Printf("  Execution time: %s\n", avgTime)
